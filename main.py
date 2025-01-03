@@ -1,4 +1,4 @@
-from lib import remove_repetitions
+from lib import remove_repetitions, zeroer
 
 N_OF_FINGERS = 5 # all operations will be modulus N_OF_FINGERS
 
@@ -49,6 +49,7 @@ class state:
                     [self.b2,self.b1][j],self.a1,self.a2)) # values that remain unchanged
         
         return remove_repetitions(ADJs)
+
 class stateAnalyzer:
     nOfConfings = 0
     nOfHandConfings = 0
@@ -57,17 +58,68 @@ class stateAnalyzer:
     stateEvaluations = []
     stateResults = []
     stateAdj = []
+    gamma = 0.005
+    epsilon = 0.01
 
-    def __init__(self):
+    def __init__(self, gamma=0.0025, epsilon=0.05):
         self.states, self.stateEvaluations, self.bestMoves, self.stateResults = self.stateGenerator()
+        self.gamma, self.epsilon = gamma, epsilon
+        
         for i in self.states:
             self.stateAdj.append(i.Adj())
+
+    def logicalIteration(self): # P(N) = zeroer(MAX(ADJ); epsilon+gamma*#ADJ) # Updates values and returns if any update has happened
+        new_stateResult = self.stateResults[:]
+        has_done_any_updates = False
+
+        for j, s in enumerate(self.states):
+            if self.stateResults[j] != " ": # State has alredy been analyzed
+                continue
+            ADJS = s.Adj()
+
+            is_winning_state = False # We don't consider state winning until we find a winning continuation
+            is_losing_state = True   # We consider the state losing until we find a not losing continuation
+
+            for k in ADJS:
+                i = self.states.index(k)
+                res = self.stateResults[i]
+                if res == -1: # There's a winning continuation
+                    is_winning_state = True
+                if res != 1:  # There's a not losing continuation
+                    is_losing_state = False
+
+
+            # Upated value
+            if is_winning_state:
+                new_stateResult[j] = 1
+            if is_losing_state:
+                new_stateResult[j] = -1
+
+            if is_losing_state or is_winning_state: # We need to evaluate the state statistically
+                has_done_any_updates = True
+
+                m = -1.0 # MAXIMUM VALUE SO FAR
+                for k in ADJS:
+                    try: # because the state may not have an evaluation
+                        o = float(self.stateEvaluations[self.states.index(k)])
+                        m = max(m, -o)
+                    except:
+                        pass
+                self.stateEvaluations[j] = zeroer(m, self.epsilon + self.gamma * (len(ADJS)-1))
+
+        self.stateResults = new_stateResult[:]
+        return has_done_any_updates
     
+    def multiLogicIteration(self):
+        last_iteration_has_done_any_updates = True
+        while last_iteration_has_done_any_updates:
+            last_iteration_has_done_any_updates = self.logicalIteration()
+
     def printMoves(self):
         # prints intestation
         print("     | ", end="")
         for i in range(1,self.nOfHandConfings):
-            print(self.states[i].strB(), end="  | ")
+             print(self.states[i].strB(), end="  | ")
         
         # rows containes the states of every row of the game
         rows = []
@@ -128,7 +180,7 @@ class stateAnalyzer:
                         v = "     "
                         
                         if type(self.stateResults[self.states.index(a)]) == int:
-                           r = [" T"," L"," W"][self.stateResults[self.states.index(a)]] # -1 LOST, 0 UNKOWN, 1 WON
+                           r = [" T"," W"," L"][self.stateResults[self.states.index(a)]] # -1 LOST, 0 UNKOWN, 1 WON
 
                         if type(self.stateEvaluations[self.states.index(a)]) == float:
                             v = str(round(self.stateEvaluations[self.states.index(a)],2))
@@ -156,10 +208,10 @@ class stateAnalyzer:
                             bestMoves[j] = []
                         j+=1
                # States, eval,  best,      result if perfect match
-        return (States, Values, bestMoves, [int(k) if type(k)==float else k for k in Values]) # a " " means unkown
+        return (States, Values, bestMoves, [int(k) if type(k)==float else " " for k in Values]) # a " " means unkown
 
 if __name__ == "__main__":
     print("WELCOME TO FINGER'S GAME ANALYSIS")
     s = stateAnalyzer()
-    print(s.printAnalysis())
-    
+    s.multiLogicIteration()
+    s.printAnalysis()
